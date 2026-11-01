@@ -26,6 +26,7 @@ struct PatchProfile: Decodable {
     let sha256: String
     let dylib: String
     let architectures: [String: ArchitectureProfile]
+    let legacy_sha256: [String]
 }
 
 struct ArchitectureProfile: Decodable {
@@ -34,6 +35,13 @@ struct ArchitectureProfile: Decodable {
     let expected: String
     let cave: String
     let cave_capacity: Int
+    let editor: EditorProfile
+}
+
+struct EditorProfile: Decodable {
+    let patch_site: String
+    let expected: String
+    let thunk_offset: Int
 }
 
 struct TargetApplication {

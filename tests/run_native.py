@@ -12,21 +12,26 @@ profile = json.loads((ROOT/'profile.json').read_text())
 sdk = subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip()
 parser = argparse.ArgumentParser()
 parser.add_argument('--arch', choices=('arm64', 'x86_64'), default=platform.machine())
+parser.add_argument('--editor', action='store_true', help='Exercise real TextView refresh')
 parser.add_argument('--app', type=Path, required=True, help='Patched WinBox bundle to exercise')
 args = parser.parse_args()
 arch = args.arch
 config = profile['architectures'][arch]
-probe = ROOT/'build'/f'native-probe-{arch}.dylib'
+kind = 'editor' if args.editor else 'table'
+probe = ROOT/'build'/f'native-probe-{kind}-{arch}.dylib'
 subprocess.run(['xcrun', 'clang', '-arch', arch, '-isysroot', sdk, '-std=c11', '-O2',
     '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-Wconversion', '-Wshadow',
-    '-mmacosx-version-min=12.0', '-dynamiclib', str(ROOT/'tests/native_probe.c'),
+    '-mmacosx-version-min=12.0', '-dynamiclib', str(ROOT/('tests/native_editor_probe.c' if args.editor else 'tests/native_probe.c')),
     '-o', str(probe)], check=True)
-report = ROOT/'build'/f'native-probe-{arch}.json'
+report = ROOT/'build'/f'native-probe-{kind}-{arch}.json'
 if report.exists():
     report.unlink()
 env = dict(os.environ, DYLD_INSERT_LIBRARIES=str(probe), WB_PROBE_REPORT=str(report),
     WB_PROBE_MODEL=config['model_data'], WB_PROBE_DESTROY=config['variant_destroy'],
     WINBOX_COMMENT_ENCODING='auto')
+if args.editor:
+    for key, value in config['editor'].items():
+        env['WB_EDITOR_'+key.upper()] = str(value)
 executable = str(args.app.resolve()/'Contents/MacOS/WinBox')
 command = [executable]
 if arch != platform.machine():

@@ -12,7 +12,19 @@
       "original_helper": "0x101544b3c",
       "dlsym": "0x10000d724",
       "cave": "0x1022c74d0",
-      "cave_capacity": 512
+      "cave_capacity": 512,
+      "editor": {
+        "patch_site": "0x1016641a8",
+        "original_helper": "0x10166448c",
+        "widget_ctor": "0x1015100d8",
+        "view_refresh": "0x101664158",
+        "view_vtable": "0x102427cc8",
+        "converter_vtable": "0x102421080",
+        "thunk_offset": 128,
+        "widget_label_offset": 136,
+        "widget_text_offset": 344,
+        "expected": "b9000094"
+      }
     },
     "x86_64": {
       "cpu": 16777223,
@@ -24,7 +36,23 @@
       "dlsym": "0x100009ee6",
       "continuation": "0x1018b38ad",
       "cave": "0x102623ec0",
-      "cave_capacity": 320
+      "cave_capacity": 320,
+      "editor": {
+        "patch_site": "0x1019e9401",
+        "original_helper": "0x1019e96a0",
+        "widget_ctor": "0x101879550",
+        "view_refresh": "0x1019e93c0",
+        "view_vtable": "0x1027b5ef0",
+        "thunk_offset": 128,
+        "widget_label_offset": 136,
+        "widget_text_offset": 344,
+        "expected": "e89a020000",
+        "converter_vtable": "0x1027af2a8"
+      }
     }
-  }
+  },
+  "legacy_sha256": [
+    "2e1a7de47a8aaeee9b727db888647d8e80ac7f52c971546e9e1f7cd713143bc0",
+    "51a2d055d2c278043c503980841d8038843bed5ff2fed80e30b71ec06502954d"
+  ]
 }

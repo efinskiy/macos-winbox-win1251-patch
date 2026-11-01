@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import ctypes
 import os
+import platform
 import subprocess
 import sys
 import shutil
@@ -49,6 +50,46 @@ def child(mode):
     lib.wb_comment_variant_v1(123, 'Привет'.encode('cp1251'), original)
     assert received == ([b''] if mode in ('utf-8', 'invalid') else ['Привет'.encode()])
 
+    widget_callback = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_char_p)
+
+    @widget_callback
+    def setter(widget, text):
+        assert widget == 456
+        received.append(text)
+
+    lib.wb_comment_widget_v1.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
+                                        widget_callback, ctypes.c_void_p]
+    lib.wb_comment_widget_v1.restype = None
+    for label, comment in ((b'Comment', True), (b'Name', False), (b'comment', False)):
+        for long_storage in (False, True):
+            storage = bytearray(24)
+            label_buffer = ctypes.create_string_buffer(label)
+            pointer = ctypes.addressof(label_buffer).to_bytes(8, 'little')
+            if platform.machine() == 'arm64':
+                if long_storage:
+                    storage[:8] = pointer
+                    storage[8:16] = len(label).to_bytes(8, 'little')
+                    storage[23] = 128
+                else:
+                    storage[:len(label)] = label
+                    storage[23] = len(label)
+            else:
+                if long_storage:
+                    storage[0] = 1
+                    storage[8:16] = len(label).to_bytes(8, 'little')
+                    storage[16:24] = pointer
+                else:
+                    storage[0] = 2 * len(label)
+                    storage[1:len(label)+1] = label
+            label_storage = ctypes.create_string_buffer(bytes(storage))
+            raw = ctypes.create_string_buffer('Привет'.encode('cp1251'))
+            before = raw.raw
+            received.clear()
+            lib.wb_comment_widget_v1(456, raw, setter, label_storage)
+            expected = (b'' if mode in ('utf-8', 'invalid') else 'Привет'.encode()) if comment else raw.value
+            assert received == [expected], (mode, label, long_storage, received)
+            assert raw.raw == before
+
 
 if __name__ == '__main__':
     if len(sys.argv) == 2:
@@ -56,4 +97,4 @@ if __name__ == '__main__':
     else:
         for mode in ('auto', 'utf-8', 'windows-1251', 'config-file', 'invalid'):
             subprocess.run([sys.executable, __file__, mode], check=True)
-        print('Bridge: all encoding modes, config file, rejection and counters passed')
+        print('Bridge: all encoding modes, config file, editor field isolation, source preservation, rejection and counters passed')

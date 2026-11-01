@@ -44,6 +44,7 @@ def main():
         shutil.copyfile(PATCH/'build/libWinBoxCommentEncoding.dylib', resources/'libWinBoxCommentEncoding.dylib')
         for arch, config in profile['architectures'].items():
             (resources/f'{arch}-thunk.bin').write_bytes(build_thunk(arch, config, BUILD))
+            (resources/f'{arch}-legacy-thunk.bin').write_bytes(build_thunk(arch, config, BUILD, include_editor=False))
         plist = {'CFBundleName': 'WinBox Comment Patcher', 'CFBundleDisplayName': 'WinBox Comment Patcher',
             'CFBundleIdentifier': 'local.winbox.comment-patcher', 'CFBundleVersion': version,
             'CFBundleShortVersionString': version, 'CFBundleExecutable': 'WinBoxCommentPatcher',

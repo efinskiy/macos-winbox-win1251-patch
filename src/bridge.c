@@ -63,9 +63,8 @@ static void load_config(void) {
     if (!config_valid) fputs("WinBox comment decoder: invalid encoding configuration\n", stderr);
 }
 
-__attribute__((visibility("default")))
-void *wb_comment_variant_v1(void *result, const char *bytes, variant_from_cstring original) {
-    if (result == NULL || original == NULL) return NULL;
+static const char *display_bytes(const char *bytes, char **owned) {
+    *owned = NULL;
     (void)pthread_once(&config_once, load_config);
     if (bytes == NULL) bytes = "";
     size_t n = strnlen(bytes, WB_COMMENT_MAX_BYTES + 1);
@@ -74,7 +73,7 @@ void *wb_comment_variant_v1(void *result, const char *bytes, variant_from_cstrin
     if (n > WB_COMMENT_MAX_BYTES) { status = WB_TOO_LARGE; goto reject; }
     if (encoding != WB_CP1251 && wb_valid_utf8((const unsigned char *)bytes, n)) {
         atomic_fetch_add_explicit(&counts[WB_OK_UTF8], 1, memory_order_relaxed);
-        return original(result, bytes);
+        return bytes;
     }
     if (encoding == WB_UTF8) goto reject;
     size_t capacity = 3 * n + 1;
@@ -85,15 +84,59 @@ void *wb_comment_variant_v1(void *result, const char *bytes, variant_from_cstrin
                                encoding, &written);
     if (status == WB_OK_UTF8 || status == WB_OK_CP1251) {
         atomic_fetch_add_explicit(&counts[status], 1, memory_order_relaxed);
-        void *answer = original(result, decoded);
-        free(decoded);
-        return answer;
+        *owned = decoded;
+        return decoded;
     }
     free(decoded);
 reject:
     atomic_fetch_add_explicit(&counts[status], 1, memory_order_relaxed);
-    /* The original constructor must initialize the QVariant even on failure. */
-    return original(result, "");
+    return "";
+}
+
+__attribute__((visibility("default")))
+void *wb_comment_variant_v1(void *result, const char *bytes, variant_from_cstring original) {
+    if (result == NULL || original == NULL) return NULL;
+    char *owned = NULL;
+    const char *decoded = display_bytes(bytes, &owned);
+    void *answer = original(result, decoded);
+    free(owned);
+    return answer;
+}
+
+static int is_comment_label(const unsigned char *storage) {
+    if (storage == NULL) return 0;
+    const char *text = NULL;
+    size_t length = 0;
+    /* These are the two libc++ string layouts in the pinned universal WinBox build. */
+#if defined(__aarch64__)
+    if ((storage[23] & 0x80u) != 0) {
+        memcpy(&text, storage, sizeof(text));
+        memcpy(&length, storage + 8, sizeof(length));
+    } else { text = (const char *)storage; length = storage[23]; }
+#elif defined(__x86_64__)
+    if ((storage[0] & 1u) != 0) {
+        memcpy(&text, storage + 16, sizeof(text));
+        memcpy(&length, storage + 8, sizeof(length));
+    } else { text = (const char *)storage + 1; length = (size_t)(storage[0] >> 1); }
+#else
+#error Unsupported WinBox architecture
+#endif
+    /* Slot::getFieldInfo supplies this built-in field name to TextWidget. */
+    static const char comment_name[] = "Comment";
+    return text != NULL && length == sizeof(comment_name)-1 &&
+        memcmp(text, comment_name, sizeof(comment_name)-1) == 0;
+}
+
+typedef void (*widget_from_cstring)(void *, const char *);
+__attribute__((visibility("default")))
+void wb_comment_widget_v1(void *widget, const char *bytes, widget_from_cstring original,
+                          const unsigned char *label_storage) {
+    if (widget == NULL || original == NULL) return;
+    if (!is_comment_label(label_storage)) { original(widget, bytes); return; }
+    char *owned = NULL;
+    const char *decoded = display_bytes(bytes, &owned);
+    original(widget, decoded);
+    free(owned);
 }
 
 __attribute__((visibility("default")))

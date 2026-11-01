@@ -24,6 +24,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=SOURCE)
     SOURCE = parser.parse_args().source.resolve()
+    initial_hash = digest(SOURCE)
+    assert initial_hash in [PROFILE['sha256'], *PROFILE['legacy_sha256']]
     (ROOT/'build').mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='in-place-', dir=ROOT/'build') as temporary:
         folder = Path(temporary)
@@ -33,7 +35,7 @@ def main():
         result = subprocess.run([str(BINARY), '--self-test', str(target)],
                                 capture_output=True, text=True, timeout=60)
         assert result.returncode == 0, result.stdout + result.stderr
-        assert target.is_dir() and digest(target) != PROFILE['sha256']
+        assert target.is_dir() and digest(target) != initial_hash
         patched_hash = digest(target)
         rejected = subprocess.run([str(BINARY), '--self-test', str(target)],
                                   capture_output=True, text=True, timeout=15)
@@ -42,15 +44,15 @@ def main():
                                 capture_output=True, text=True, timeout=60)
         assert result.returncode == 0, result.stdout + result.stderr
         assert 'Rollback verified:' in result.stdout
-        assert digest(rollback) == PROFILE['sha256']
+        assert digest(rollback) == initial_hash
         journals = [json.loads(p.read_text()) for p in (folder/'.winbox-comment-backups').glob('*.json')]
         assert {j['state'] for j in journals} == {'committed', 'rolled_back'}
         for journal in journals:
             with zipfile.ZipFile(journal['backup']) as archive:
                 member = Path(journal['application']).name+'/Contents/MacOS/WinBox'
-                assert hashlib.sha256(archive.read(member)).hexdigest() == PROFILE['sha256']
+                assert hashlib.sha256(archive.read(member)).hexdigest() == initial_hash
         assert not list(folder.glob('.winbox-patch-*'))
-        assert digest(SOURCE) == PROFILE['sha256']
+        assert digest(SOURCE) == initial_hash
         report = {'same_path_update': True, 'backup_original_hash': True,
                   'post_commit_failure_rollback': True, 'repeat_patch_rejected': True,
                   'temporary_installation_cleaned': True, 'installed_source_unchanged': True}

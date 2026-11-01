@@ -35,7 +35,8 @@ struct PatchEngine {
             throw PatchError.invalid("Исполняемый файл превышает допустимый размер.")
         }
         let binary = try Data(contentsOf: executable)
-        guard hash(binary) == profile.sha256 else {
+        let inputHash = hash(binary)
+        guard inputHash == profile.sha256 || profile.legacy_sha256.contains(inputHash) else {
             let version = plist?["CFBundleShortVersionString"] as? String ?? "неизвестна"
             throw PatchError.invalid("Версия WinBox \(version) не поддерживается этим патчем. Поддерживается точная сборка \(profile.version).")
         }
@@ -47,6 +48,7 @@ struct PatchEngine {
                progress: (String) -> Void) throws -> AppliedPatch {
         progress("Проверка выбранного WinBox…")
         let target = try inspect(source)
+        let inputHash = hash(target.binary)
         let parent = target.url.deletingLastPathComponent()
         try requireClosed(target.url)
         guard manager.isWritableFile(atPath: parent.path) else {
@@ -84,7 +86,10 @@ struct PatchEngine {
         try manager.createDirectory(at: frameworks, withIntermediateDirectories: true)
         let library = frameworks.appendingPathComponent("libWinBoxCommentEncoding.dylib")
         if manager.fileExists(atPath: library.path) {
-            throw PatchError.invalid("В исходном приложении уже присутствует библиотека патча.")
+            guard profile.legacy_sha256.contains(inputHash) else {
+                throw PatchError.invalid("В исходном приложении уже присутствует неизвестная библиотека патча.")
+            }
+            try manager.removeItem(at: library)
         }
         try manager.copyItem(at: resources.appendingPathComponent(library.lastPathComponent), to: library)
         try Data("encoding=\(encoding.rawValue)\n".utf8).write(
@@ -126,13 +131,15 @@ struct PatchEngine {
         func record(_ state: String) throws {
             let data = try JSONSerialization.data(withJSONObject: ["state": state,
                 "application": target.url.path, "backup": backup.path,
-                "original_sha256": profile.sha256, "patched_sha256": signedHash,
+                "original_sha256": inputHash, "patched_sha256": signedHash,
                 "encoding": encoding.rawValue, "recovery_application": replacement.path], options: [.prettyPrinted, .sortedKeys])
             try data.write(to: journal, options: .atomic)
         }
         try record("prepared")
         // Recheck immediately before committing; a running process must keep its original bundle.
-        _ = try inspect(target.url)
+        guard hash(try inspect(target.url).binary) == inputHash else {
+            throw PatchError.invalid("WinBox изменился во время подготовки. Выберите приложение заново.")
+        }
         try requireClosed(target.url)
         progress("Применение патча к выбранному приложению…")
         try exchange(target.url, replacement)
@@ -150,7 +157,9 @@ struct PatchEngine {
             progress("Восстановление исходного приложения…")
             do {
                 try exchange(target.url, replacement)
-                _ = try inspect(target.url)
+                guard hash(try inspect(target.url).binary) == inputHash else {
+                    throw PatchError.invalid("Контрольная сумма восстановленного приложения не совпала.")
+                }
             } catch {
                 // Never delete the only intact original if the volume refuses the reverse swap.
                 preserveInstallation = true
@@ -200,6 +209,7 @@ struct PatchEngine {
     }
 
     private func patchBinary(_ data: Data) throws -> Data {
+        let upgrading = profile.legacy_sha256.contains(hash(data))
         let slices = try FatSlice.read(data)
         var byCPU: [UInt32: (String, ArchitectureProfile)] = [:]
         for (name, configuration) in profile.architectures {
@@ -227,8 +237,16 @@ struct PatchEngine {
             }
             let fileSite = try mach.fileOffset(site, length: expected.count)
             let fileCave = try mach.fileOffset(cave, length: configuration.cave_capacity)
-            guard mach.image.data[fileSite..<fileSite+expected.count] == expected,
-                  mach.image.data[fileCave..<fileCave+configuration.cave_capacity].allSatisfy({ $0 == 0 }),
+            let inputInstructions = try upgrading
+                ? branch(name, site: site, target: cave, length: expected.count, call: false) : expected
+            let expectedPadding: Data
+            if upgrading {
+                let legacy = try Data(contentsOf: resources.appendingPathComponent(name + "-legacy-thunk.bin"))
+                guard legacy.count <= configuration.cave_capacity else { throw PatchError.invalid("Повреждён профиль обновления.") }
+                expectedPadding = legacy + Data(repeating: 0, count: configuration.cave_capacity-legacy.count)
+            } else { expectedPadding = Data(repeating: 0, count: configuration.cave_capacity) }
+            guard mach.image.data[fileSite..<fileSite+expected.count] == inputInstructions,
+                  mach.image.data[fileCave..<fileCave+configuration.cave_capacity] == expectedPadding,
                   mach.segments.contains(where: {
                       $0.name == "__TEXT" && $0.protection & 4 != 0 && cave >= $0.address &&
                       cave-$0.address < UInt64($0.fileSize)
@@ -236,31 +254,48 @@ struct PatchEngine {
                   !mach.sections.contains(where: { $0.address < cave+UInt64(payload.count) && cave < $0.address+$0.size }) else {
                 throw PatchError.invalid("Инструкции WinBox или свободная область не совпадают с профилем.")
             }
-            let branch: Data
-            if name == "arm64" {
-                let delta = Int64(cave) - Int64(site)
-                guard expected.count == 4, delta % 4 == 0, delta >= -(1 << 27), delta < (1 << 27) else {
-                    throw PatchError.invalid("Недопустимое расстояние перехода arm64.")
-                }
-                var instruction = BinaryImage(data: Data(repeating: 0, count: 4))
-                try instruction.write(0x14000000 | (UInt64(bitPattern: delta/4) & 0x3ffffff), at: 0, width: 4)
-                branch = instruction.data
-            } else if name == "x86_64" {
-                let delta = Int64(cave) - Int64(site) - 5
-                guard expected.count >= 5, delta >= Int64(Int32.min), delta <= Int64(Int32.max) else {
-                    throw PatchError.invalid("Недопустимое расстояние перехода Intel.")
-                }
-                var instruction = BinaryImage(data: Data(repeating: 0x90, count: expected.count))
-                instruction.data[0] = 0xe9
-                try instruction.write(UInt64(bitPattern: delta) & 0xffffffff, at: 1, width: 4)
-                branch = instruction.data
-            } else { throw PatchError.invalid("Неподдерживаемая архитектура патча.") }
-            try mach.addLibrary(profile.dylib)
-            try mach.image.replace(at: fileSite, with: branch)
+            let editor = configuration.editor
+            let editorSite = try address(editor.patch_site)
+            let editorExpected = try bytesFromHex(editor.expected)
+            let editorFileSite = try mach.fileOffset(editorSite, length: editorExpected.count)
+            guard editor.thunk_offset > 0, editor.thunk_offset < payload.count,
+                  mach.image.data[editorFileSite..<editorFileSite+editorExpected.count] == editorExpected else {
+                throw PatchError.invalid("Код заполнения редактора не совпадает с профилем.")
+            }
+            if !upgrading { try mach.addLibrary(profile.dylib) }
+            try mach.image.replace(at: fileSite, with: branch(name, site: site, target: cave, length: expected.count, call: false))
+            try mach.image.replace(at: editorFileSite, with: branch(name, site: editorSite,
+                target: cave+UInt64(editor.thunk_offset), length: editorExpected.count, call: true))
             try mach.image.replace(at: fileCave, with: payload)
             try patched.replace(at: slice.offset, with: mach.image.data)
         }
         return patched.data
+    }
+
+    private func branch(_ architecture: String, site: UInt64, target: UInt64,
+                        length: Int, call: Bool) throws -> Data {
+        guard site <= UInt64(Int64.max)-5, target <= UInt64(Int64.max) else {
+            throw PatchError.invalid("Адрес перехода выходит за пределы архитектуры.")
+        }
+        if architecture == "arm64" {
+            let delta = Int64(target)-Int64(site)
+            guard length == 4, delta % 4 == 0, delta >= -(1 << 27), delta < (1 << 27) else {
+                throw PatchError.invalid("Недопустимое расстояние перехода arm64.")
+            }
+            var instruction = BinaryImage(data: Data(repeating: 0, count: 4))
+            try instruction.write((call ? 0x94000000 : 0x14000000) |
+                (UInt64(bitPattern: delta/4) & 0x3ffffff), at: 0, width: 4)
+            return instruction.data
+        }
+        guard architecture == "x86_64" else { throw PatchError.invalid("Неподдерживаемая архитектура.") }
+        let delta = Int64(target)-Int64(site)-5
+        guard length >= 5, delta >= Int64(Int32.min), delta <= Int64(Int32.max) else {
+            throw PatchError.invalid("Недопустимое расстояние перехода Intel.")
+        }
+        var instruction = BinaryImage(data: Data(repeating: 0x90, count: length))
+        instruction.data[0] = call ? 0xe8 : 0xe9
+        try instruction.write(UInt64(bitPattern: delta) & 0xffffffff, at: 1, width: 4)
+        return instruction.data
     }
 
     private func hash(_ data: Data) -> String {

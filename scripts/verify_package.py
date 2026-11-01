@@ -40,8 +40,13 @@ def main():
             size = (resources/f'{architecture}-thunk.bin').stat().st_size
             if not 0 < size <= configuration['cave_capacity']:
                 raise ValueError('Invalid packaged trampoline size')
+            legacy_size = (resources/f'{architecture}-legacy-thunk.bin').stat().st_size
+            if not 0 < legacy_size <= configuration['editor']['thunk_offset'] < size:
+                raise ValueError('Missing editor trampoline or invalid upgrade payload')
     info = {'version': value, 'architectures': ['arm64', 'x86_64'], 'minimum_macos': '12.0',
         'supported_winbox': profile['version'], 'supported_winbox_sha256': profile['sha256'],
+        'supported_upgrade_sha256': profile['legacy_sha256'],
+        'comment_display': ['table', 'object-editor'],
         'signature': 'ad-hoc', 'notarized': False, 'commit': os.environ.get('GITHUB_SHA')}
     metadata = dist/'build-info.json'
     metadata.write_text(json.dumps(info, indent=2)+'\n')
