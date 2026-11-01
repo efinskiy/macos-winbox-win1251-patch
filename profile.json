@@ -1,0 +1,30 @@
+{
+  "version": "4.4.102000",
+  "sha256": "e68085d6af5d3b54227c522cb2b9416e132779fa70ad9433771cc54f181c35ae",
+  "dylib": "@executable_path/../Frameworks/libWinBoxCommentEncoding.dylib",
+  "architectures": {
+    "arm64": {
+      "cpu": 16777228,
+      "model_data": "0x1015457d4",
+      "variant_destroy": "0x1011a0a00",
+      "patch_site": "0x101545ac4",
+      "expected": "1efcff17",
+      "original_helper": "0x101544b3c",
+      "dlsym": "0x10000d724",
+      "cave": "0x1022c74d0",
+      "cave_capacity": 512
+    },
+    "x86_64": {
+      "cpu": 16777223,
+      "model_data": "0x1018b2f20",
+      "variant_destroy": "0x10146c2a0",
+      "patch_site": "0x1018b3206",
+      "expected": "498b8eb8010000488b34c1",
+      "original_helper": "0x1018b2100",
+      "dlsym": "0x100009ee6",
+      "continuation": "0x1018b38ad",
+      "cave": "0x102623ec0",
+      "cave_capacity": 320
+    }
+  }
+}

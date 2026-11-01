@@ -1,0 +1,100 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Universal macOS application
+    runs-on: macos-15
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+
+      - name: Validate application version and release tag
+        id: version
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: python3 scripts/version.py
+
+      - name: Build decoder for Apple Silicon and Intel
+        run: python3 build.py
+
+      - name: Test UTF-8 and Windows-1251 decoding
+        run: python3 tests/test_codec.py
+
+      - name: Test bridge modes and configuration
+        run: python3 tests/test_bridge.py
+
+      - name: Build and sign Swift application
+        run: python3 SwiftPatcher/build.py
+
+      - name: Verify release ZIP and generate checksums
+        run: python3 scripts/verify_package.py
+
+      - name: Upload release files
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: macos-universal-${{ steps.version.outputs.version }}
+          path: |
+            SwiftPatcher/dist/WinBox-Comment-Patcher-${{ steps.version.outputs.version }}.zip
+            SwiftPatcher/dist/SHA256SUMS
+            SwiftPatcher/dist/build-info.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release files
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: macos-universal-${{ needs.build.outputs.version }}
+          path: release
+
+      - name: Publish ZIP, checksums and build metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE_TAG" release/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "WinBox Comment Patcher $RELEASE_VERSION" \
+              --generate-notes
+          fi

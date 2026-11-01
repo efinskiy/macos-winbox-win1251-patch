@@ -1,0 +1,13 @@
+**/build/
+**/dist/
+**/__pycache__/
+*.py[cod]
+*.app/
+*.dylib
+*.o
+*.zip
+*.ips
+**/.winbox-comment-backups/
+.DS_Store
+.idea/
+.vscode/
