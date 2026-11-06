@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         title.font = .systemFont(ofSize: 25, weight: .semibold)
         let subtitle = NSTextField(wrappingLabelWithString: "Обновляет выбранный WinBox. Перед изменением сохраняет резервный архив.")
         subtitle.textColor = .secondaryLabelColor
-        let compatibility = NSTextField(labelWithString: "WinBox 4.4.102000 · Apple Silicon и Intel")
+        let compatibility = NSTextField(labelWithString: "Apple Silicon и Intel")
         compatibility.font = .systemFont(ofSize: 12)
         compatibility.textColor = .secondaryLabelColor
 
@@ -102,7 +102,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
         do {
             guard let resources = Bundle.main.resourceURL else { throw PatchError.invalid("Не найдены ресурсы патчера.") }
-            engine = try PatchEngine(resources: resources)
+            let loadedEngine = try PatchEngine(resources: resources)
+            engine = loadedEngine
+            compatibility.stringValue = "WinBox \(loadedEngine.profile.version) · Apple Silicon и Intel"
         } catch {
             statusLabel.stringValue = error.localizedDescription
             statusLabel.textColor = .systemRed

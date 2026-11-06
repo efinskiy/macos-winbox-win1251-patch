@@ -1,25 +1,25 @@
 {
-  "version": "4.4.102000",
-  "sha256": "e68085d6af5d3b54227c522cb2b9416e132779fa70ad9433771cc54f181c35ae",
+  "version": "4.5.102000",
+  "sha256": "8e2072f258d557044a461e121f4c14419a6cf5dcfd55f9a596dd712e9058aeb6",
   "dylib": "@executable_path/../Frameworks/libWinBoxCommentEncoding.dylib",
   "architectures": {
     "arm64": {
       "cpu": 16777228,
-      "model_data": "0x1015457d4",
-      "variant_destroy": "0x1011a0a00",
-      "patch_site": "0x101545ac4",
+      "model_data": "0x1015540dc",
+      "variant_destroy": "0x10119f354",
+      "patch_site": "0x1015543cc",
       "expected": "1efcff17",
-      "original_helper": "0x101544b3c",
-      "dlsym": "0x10000d724",
-      "cave": "0x1022c74d0",
+      "original_helper": "0x101553444",
+      "dlsym": "0x10000b290",
+      "cave": "0x1023bb500",
       "cave_capacity": 512,
       "editor": {
-        "patch_site": "0x1016641a8",
-        "original_helper": "0x10166448c",
-        "widget_ctor": "0x1015100d8",
-        "view_refresh": "0x101664158",
-        "view_vtable": "0x102427cc8",
-        "converter_vtable": "0x102421080",
+        "patch_site": "0x1016761e8",
+        "original_helper": "0x1016764cc",
+        "widget_ctor": "0x10150f5a4",
+        "view_refresh": "0x101676198",
+        "view_vtable": "0x10251d2b8",
+        "converter_vtable": "0x102516658",
         "thunk_offset": 128,
         "widget_label_offset": 136,
         "widget_text_offset": 344,
@@ -28,31 +28,28 @@
     },
     "x86_64": {
       "cpu": 16777223,
-      "model_data": "0x1018b2f20",
-      "variant_destroy": "0x10146c2a0",
-      "patch_site": "0x1018b3206",
+      "model_data": "0x1018c5b60",
+      "variant_destroy": "0x10146d3b0",
+      "patch_site": "0x1018c5e46",
       "expected": "498b8eb8010000488b34c1",
-      "original_helper": "0x1018b2100",
-      "dlsym": "0x100009ee6",
-      "continuation": "0x1018b38ad",
-      "cave": "0x102623ec0",
+      "original_helper": "0x1018c4d40",
+      "dlsym": "0x10000a056",
+      "continuation": "0x1018c64ed",
+      "cave": "0x102730150",
       "cave_capacity": 320,
       "editor": {
-        "patch_site": "0x1019e9401",
-        "original_helper": "0x1019e96a0",
-        "widget_ctor": "0x101879550",
-        "view_refresh": "0x1019e93c0",
-        "view_vtable": "0x1027b5ef0",
+        "patch_site": "0x101a015e1",
+        "original_helper": "0x101a01880",
+        "widget_ctor": "0x10187b330",
+        "view_refresh": "0x101a015a0",
+        "view_vtable": "0x1028c44a0",
         "thunk_offset": 128,
         "widget_label_offset": 136,
         "widget_text_offset": 344,
         "expected": "e89a020000",
-        "converter_vtable": "0x1027af2a8"
+        "converter_vtable": "0x1028bd840"
       }
     }
   },
-  "legacy_sha256": [
-    "2e1a7de47a8aaeee9b727db888647d8e80ac7f52c971546e9e1f7cd713143bc0",
-    "51a2d055d2c278043c503980841d8038843bed5ff2fed80e30b71ec06502954d"
-  ]
+  "legacy_sha256": []
 }
